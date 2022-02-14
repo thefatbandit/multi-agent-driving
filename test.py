@@ -11,14 +11,6 @@ from ray.tune.registry import register_env
 from ray.rllib.contrib.alpha_zero.models.custom_torch_models import DenseModel
 from ray.rllib.models.catalog import ModelCatalog
 
-
-CONFIG_DICT = {
-        "lanes":[LaneSpec(2, [-1, -1]), LaneSpec(2, [-2, -1]), LaneSpec(3, [-3, -1])], 
-        "width":8, "agent_speed_range":(-3,-1), "finish_position":Point(0,1), 
-        "agent_pos_init":Point(6,1), "stochasticity":1.0, "tensor_state":False, 
-        "flicker_rate":0.5, "mask": MaskSpec('follow', 2), "random_seed":13
-        }
-
 def ray_main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-workers", default=6, type=int)
@@ -36,10 +28,10 @@ def ray_main():
     config=     {    
                         "env": "drivingenv",
                         "env_config": {
-                                "lanes": [LaneSpec(2, [-1, -1]), LaneSpec(2, [-2, -1]), LaneSpec(3, [-3, -1])], 
-                                "width": 8, "agent_speed_range": (-3,-1), "finish_position": Point(0,1), 
+                                "lanes": [LaneSpec(1, [-1, -1]), LaneSpec(1, [-1, -1]), LaneSpec(1, [-1, -1])], 
+                                "width": 8, "agent_speed_range": (-1,-1), "finish_position": Point(0,1), 
                                 "agent_pos_init": Point(6,1), "stochasticity": 1.0, "tensor_state": False, 
-                                "flicker_rate": 0.5, "mask": MaskSpec('follow', 2), "random_seed": 13,
+                                "flicker_rate": 0.5, "mask": MaskSpec('follow', 1), "random_seed": 13, "observation_type": 'vector'
                         }, 
                         # "num_workers": args.num_workers,
                         # "rollout_fragment_length": 50,
@@ -61,38 +53,6 @@ def ray_main():
         #     checkpoint_at_end=True, 
         #     checkpoint_freq=1
         )
-
-
-    # tune.run(
-    #     "contrib/AlphaZero",
-    #     stop={"training_iteration": args.training_iteration},
-    #     max_failures=0,
-    #     config={
-    #         "env": GridDrivingEnv,
-    #         "env_config" : ENV_CONFIG, 
-    #         "num_workers": args.num_workers,
-    #         "rollout_fragment_length": 50,
-    #         "train_batch_size": 500,
-    #         "sgd_minibatch_size": 64,
-    #         "lr": 1e-4,
-    #         "num_sgd_iter": 1,
-    #         "mcts_config": {
-    #             "puct_coefficient": 1.5,
-    #             "num_simulations": 100,
-    #             "temperature": 1.0,
-    #             "dirichlet_epsilon": 0.20,
-    #             "dirichlet_noise": 0.03,
-    #             "argmax_tree_policy": False,
-    #             "add_dirichlet_noise": True,
-    #         },
-    #         "ranked_rewards": {
-    #             "enable": True,
-    #         },
-    #         "model": {
-    #             "custom_model": "dense_model",
-    #         },
-    #     },
-    # )
 
 if __name__ == "__main__":
     ray_main()

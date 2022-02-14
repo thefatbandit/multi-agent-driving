@@ -3,6 +3,8 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 from gym import spaces
 
+from typing import Optional, Union
+
 import numpy as np
 from collections import namedtuple
 from enum import Enum
@@ -40,14 +42,15 @@ class SparseReward:
 
 class DefaultConfig:
     LANES = [
-        LaneSpec(1, [-2, -1]),
-        LaneSpec(2, [-3, -3]),
-        LaneSpec(3, [-3, -1]),
+        LaneSpec(1, [-1, -1]),
+        LaneSpec(1, [-1, -1]),
+        LaneSpec(1, [-1, -1]),
     ]
     WIDTH = 10
     PLAYER_SPEED_RANGE = [-1, -1]
     STOCHASTICITY = 1.0
-
+    FLICKER_RATE = 0.5
+    RANDOM_SEED = 13
 
 class ActionNotFoundException(Exception): 
     pass
@@ -339,7 +342,6 @@ class World(object):
                 for lane in self.lanes:
                     for car in lane.ordered_cars:
                         last_y = car.position.y
-
                         car.step()
 
                         if car != self.agent:
@@ -354,7 +356,7 @@ class World(object):
                     raise AgentCrashedException
 
                 # Handle car jump pass through finish
-                if self.agent and self.finish_position and self.agent.position == self.finish_position:
+                if (self.agent and self.finish_position) and (self.agent.position == self.finish_position):
                     self.agent_state = AgentState.finished
                     raise AgentFinishedException
 
@@ -403,12 +405,13 @@ class World(object):
         v = [self.state.agent.position.x, self.state.agent.position.y]
         if speed:
             v += [self.state.agent.speed]
-        v += [self.state.finish_position.x, self.state.finish_position.y]
         for car in self.state.cars:
             if self.state.agent and car != self.state.agent:
                 v += [car.position.x, car.position.y]
-                if speed:
-                    v += [car.speed]
+            if speed:
+                v += [car.speed]
+        if self.state.finish_position:
+            v += [self.state.finish_position.x, self.state.finish_position.y] 
         if trail:
             v += self.state.occupancy_trails.flatten().tolist()
         v = np.array(v)
@@ -445,8 +448,12 @@ class World(object):
         if self.mask:
             mask = self.mask.get()
             agent = agent if mask.contains(agent.position) else None
-            other_cars = set([car for car in list(other_cars) if mask.contains(car.position)])
-            finish_position = finish_position if mask.contains(finish_position) else None
+            
+            # other_cars = set([car for car in list(other_cars) if mask.contains(car.position)])
+            if mask.contains(finish_position):
+                finish_position = finish_position
+            else:
+                None
             occupancy_trails_mask = np.full(self.occupancy_trails.shape, False)
             occupancy_trails_mask[mask.x:mask.x+mask.w, mask.y:mask.y+mask.h] = True
             occupancy_trails[~occupancy_trails_mask] = 0.0
@@ -543,46 +550,39 @@ def generate_random_lane_speed(lanes):
 class GridDrivingEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, config: EnvContext):
-        self.random_seed = config.get('random_seed', None)
-
-        self.lanes = config.get('lanes', DefaultConfig.LANES)
-        self.width = config.get('width', DefaultConfig.WIDTH)
-        self.random_lane_speed = config.get('random_lane_speed', False)
-
+    def __init__(self, config=None):
+        self.random_seed = DefaultConfig.RANDOM_SEED
+        self.lanes = DefaultConfig.LANES
+        self.width = DefaultConfig.WIDTH
+        self.random_lane_speed = False
         if self.random_lane_speed: self.lanes_orig = self.lanes
-
-        self.agent_speed_range = config.get('agent_speed_range', DefaultConfig.PLAYER_SPEED_RANGE)
-        self.finish_position = config.get('finish_position', Point(0, 0))
-        self.agent_pos_init = config.get('agent_pos_init', Point(self.width-1, len(self.lanes)-1))
-
-        self.p = config.get('stochasticity', DefaultConfig.STOCHASTICITY)
-        self.observation_type = config.get('observation_type', 'state')
+        self.agent_speed_range = DefaultConfig.PLAYER_SPEED_RANGE
+        self.finish_position = Point(0, 1)
+        self.agent_pos_init = Point(6, 1)
+        self.p = DefaultConfig.STOCHASTICITY
+        
+        self.observation_type = 'vector'
         assert self.observation_type in ['state', 'tensor', 'vector']
-
-        self.flicker_rate = config.get('flicker_rate', 0.0)
-
-        self.mask_spec = config.get('mask', None)
-
-        self.ensure_initial_solvable = config.get('ensure_initial_solvable', False)
-
-        self.agent_ignore = config.get('agent_ignore', False)
-
-        self.rewards = config.get('rewards', SparseReward)
+        
+        self.flicker_rate = DefaultConfig.FLICKER_RATE
+        self.mask_spec = MaskSpec('follow', 2)
+        self.ensure_initial_solvable = False
+        self.agent_ignore = False
+        
+        self.rewards = SparseReward
         rewards = [self.rewards.TIMESTEP_REWARD, self.rewards.CRASH_REWARD, self.rewards.MISSED_REWARD, self.rewards.FINISH_REWARD]
         self.reward_range = (min(rewards), max(rewards))
-
         self.boundary = Rectangle(self.width, len(self.lanes))
         self.world = World(self.boundary, finish_position=self.finish_position, flicker_rate=self.flicker_rate, mask=self.mask_spec)
-
         agent_direction = np.sign(self.agent_speed_range[0])
+        
         self.actions = [Action('up', Point(agent_direction,-1)), Action('down', Point(agent_direction,1))]
         self.actions += [Action('forward[{}]'.format(i), Point(i, 0)) 
                             for i in range(self.agent_speed_range[0], self.agent_speed_range[1]+1)]
-
+       
         self.action_space = spaces.Discrete(len(self.actions))
-
         self.reset()
+    
 
     def seed(self, seed=None):
         global random
@@ -603,6 +603,7 @@ class GridDrivingEnv(gym.Env):
             return self.state, reward, self.done, {}
 
         try:
+            print(action)
             self.world.step(action)
             reward = self.rewards.TIMESTEP_REWARD
         except AgentCrashedException:
@@ -613,12 +614,13 @@ class GridDrivingEnv(gym.Env):
             reward = self.rewards.FINISH_REWARD
 
         self.update_state()
-
         return self.state, reward, self.done, {}
 
     def step(self, action, state=None):
+        assert self.state is not None, "Call reset before using step method."
         if state is not None:
             self.load_state(state)
+        print(action)
         return self._step(action)
 
     def load_state(self, state):
@@ -626,8 +628,6 @@ class GridDrivingEnv(gym.Env):
             raise NotImplementedError
 
         self.world.load(state)
-
-        self.update_observation_space()
         self.update_state()
 
         return self.state
@@ -665,18 +665,16 @@ class GridDrivingEnv(gym.Env):
 
         self.agent = ActionableCar(self.agent_pos_init, self.agent_speed_range, self.world, circular=False, auto_brake=False, auto_lane=False, 
                                     p=self.p, id='<', ignore=self.agent_ignore)
-        self.cars = [self.agent]
-        if self.ensure_initial_solvable:
-            self.cars += self.distribute_cars_solvable()
-        else:
-            self.cars += self.distribute_cars()
         
-        self.world.init(self.cars, agent=self.agent)
+        # Generating random car positions
+        self.cars = [self.agent]
+        self.cars += self.distribute_cars()
 
-        self.update_observation_space()
+        # Initializing the gym world
+        self.world.init(self.cars, agent=self.agent)
+        self.observation_space = self.world.vector_space()
 
         self.update_state()
-
         return self.state
 
     def update_state(self):
@@ -687,19 +685,23 @@ class GridDrivingEnv(gym.Env):
         else:
             self.state = self.world.state
 
-    def update_observation_space(self):
-        if self.observation_type == 'tensor':
-            self.observation_space = self.world.tensor_space()
-        elif self.observation_type == 'vector':
-            self.observation_space = self.world.vector_space()
-        else:
-            n_cars = sum([l.cars for l in self.lanes])
-            self.observation_space = spaces.Dict({
-                'cars': spaces.Tuple(tuple([self.world.tensor_space(channel=False) for i in range(n_cars)])),
-                'agent_pos': self.world.tensor_space(channel=False), 
-                'finish_pos': self.world.tensor_space(channel=False), 
-                'occupancy_trails': spaces.MultiBinary(self.world.tensor_space(channel=False).shape)
-            })
+    # def update_observation_space(self):
+    #     if self.observation_type == 'tensor':
+    #         self.observation_space = self.world.tensor_space()
+    #         print(self.world.tensor_space())
+
+    #     elif self.observation_type == 'vector':
+    #         self.observation_space = self.world.vector_space()
+        
+    #     else:
+    #         n_cars = sum([l.cars for l in self.lanes])
+    #         self.observation_space = spaces.Dict({
+    #             'cars': spaces.Tuple(tuple([self.world.tensor_space(channel=False) for i in range(n_cars)])),
+    #             'agent_pos': self.world.tensor_space(channel=False), 
+    #             'finish_pos': self.world.tensor_space(channel=False), 
+    #             'occupancy_trails': spaces.MultiBinary(self.world.tensor_space(channel=False).shape)
+    #         })
+        
 
     def render(self, mode='human'):
         if mode != 'human':
@@ -730,4 +732,3 @@ class GridDrivingEnv(gym.Env):
     @property
     def done(self):
         return self.world.state.agent_state != AgentState.alive
-    

@@ -4,16 +4,23 @@ import gym
 import numpy as np
 from gym.spaces import Discrete, Dict, Box
 
+import gym_grid_driving_ray
+from gym_grid_driving_ray.envs.grid_driving import LaneSpec, MaskSpec, Point, GridDrivingEnv
 
-class CartPole:
+lanes = [
+        LaneSpec(1, [-1, -1]),
+        LaneSpec(1, [-1, -1]),
+        LaneSpec(1, [-1, -1]),
+        ]
+
+class Grid:
     """
-    Wrapper for gym CartPole environment where the reward
-    is accumulated to the end
+    Wrapper for the gym Grid Driving Env where the reward is accumulated to the end
     """
 
     def __init__(self, config=None):
-        self.env = gym.make("CartPole-v0")
-        self.action_space = Discrete(2)
+        self.env = gym.make('GridDriving-ray-v0')
+        self.action_space = Discrete(3)
         self.observation_space = Dict(
             {
                 "obs": self.env.observation_space,
@@ -26,30 +33,23 @@ class CartPole:
         self.running_reward = 0
         return {
             "obs": self.env.reset(),
-            "action_mask": np.array([1, 1], dtype=np.float32),
+            "action_mask": np.array([1]*self.action_space.n, dtype=np.float32),
         }
-
-    def step(self, action):
+    def step(self,action):
         obs, rew, done, info = self.env.step(action)
         self.running_reward += rew
         score = self.running_reward if done else 0
         return (
-            {"obs": obs, "action_mask": np.array([1, 1], dtype=np.float32)},
-            score,
-            done,
+            {"obs": obs, "action_mask": np.array([1]*self.action_space.n, dtype=np.float32)}, 
+            score, 
+            done, 
             info,
         )
-
     def set_state(self, state):
         self.running_reward = state[1]
         self.env = deepcopy(state[0])
         obs = np.array(list(self.env.unwrapped.state))
-        return {"obs": obs, "action_mask": np.array([1, 1], dtype=np.float32)}
-
+        return {"obs": obs, "action_mask": np.array([1]*self.action_space.n, dtype=np.float32)}
+    
     def get_state(self):
         return deepcopy(self.env), self.running_reward
-
-if __name__ == "__main__":
-    A = CartPole()
-    # print(A.observation_space)
-    print(A.env.observation_space.shape)
