@@ -581,16 +581,17 @@ class GridDrivingEnv(gym.Env):
                             for i in range(self.agent_speed_range[0], self.agent_speed_range[1]+1)]
        
         self.action_space = spaces.Discrete(len(self.actions))
+
+        self.state= None
         self.reset()
     
-
     def seed(self, seed=None):
         global random
         random, seed = seeding.np_random(seed)
         return [seed]
 
     def _step(self, action):
-        if isinstance(action, int):
+        if isinstance(action, np.int64):
             assert action in range(len(self.actions))
             action = self.actions[action]
         assert isinstance(action, Action)
@@ -603,7 +604,6 @@ class GridDrivingEnv(gym.Env):
             return self.state, reward, self.done, {}
 
         try:
-            print(action)
             self.world.step(action)
             reward = self.rewards.TIMESTEP_REWARD
         except AgentCrashedException:
@@ -619,8 +619,8 @@ class GridDrivingEnv(gym.Env):
     def step(self, action, state=None):
         assert self.state is not None, "Call reset before using step method."
         if state is not None:
+            print("aaya")
             self.load_state(state)
-        print(action)
         return self._step(action)
 
     def load_state(self, state):
@@ -631,7 +631,6 @@ class GridDrivingEnv(gym.Env):
         self.update_state()
 
         return self.state
-
 
     def distribute_cars(self):
         cars = []
@@ -669,7 +668,6 @@ class GridDrivingEnv(gym.Env):
         # Generating random car positions
         self.cars = [self.agent]
         self.cars += self.distribute_cars()
-
         # Initializing the gym world
         self.world.init(self.cars, agent=self.agent)
         self.observation_space = self.world.vector_space()

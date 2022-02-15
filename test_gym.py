@@ -12,9 +12,9 @@ from ray.rllib.contrib.alpha_zero.models.custom_torch_models import DenseModel
 from ray.rllib.models.catalog import ModelCatalog
 
 lanes = [
-        LaneSpec(2, [-1, -1]),
-        LaneSpec(2, [-2, -1]),
-        LaneSpec(3, [-3, -1]),
+        LaneSpec(1, [-1, -1]),
+        LaneSpec(1, [-2, -1]),
+        LaneSpec(1, [-3, -1]),
         ]
 
 def run_one_episode (env, verbose=False):
@@ -48,7 +48,7 @@ def gym_main():
     # first, create the custom environment and run it for one episode
     env = gym.make('GridDriving-gym-v0', lanes=lanes, width=8, 
                 agent_speed_range=(-3,-1), finish_position=Point(0,1), agent_pos_init=Point(6,1),
-                stochasticity=1.0, tensor_state=False, flicker_rate=0.5, mask=MaskSpec('follow', 2), random_seed=13)
+                stochasticity=1.0, tensor_state=False, flicker_rate=0.5, mask=MaskSpec('follow', 2), random_seed=12)
 
     sum_reward = run_one_episode(env, verbose=True)
 

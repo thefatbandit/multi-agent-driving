@@ -1,4 +1,4 @@
-"""Example of using training on CartPole."""
+"""Example of using training on gym-grid env."""
 
 import argparse
 
